@@ -1,0 +1,404 @@
+<!-- 티스토리 HTML 모드에 전체 복사·붙여넣기용: 3D 반응(상단) + 설명/기능(하단) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  #ec-stage {
+    position: relative;
+    width: 100%;
+    height: 540px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #0b132b;
+    border-radius: 16px;
+  }
+  @media (max-width: 768px) { #ec-stage { height: 420px; } }
+  #ec-gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---- 아래 설명/기능 영역 ---- */
+  #ec-wrap { width: 100%; margin: 0; padding: 0; font-family: 'Pretendard',-apple-system,'Apple SD Gothic Neo',sans-serif; }
+  #ec-panel { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .ec-card {
+    background: #0f172a; border: 1px solid #334155; border-radius: 14px;
+    padding: 14px 16px; color: #e2e8f0; font-size: 13px; line-height: 1.7;
+  }
+  .ec-card h3 { margin: 0 0 6px; font-size: 14px; }
+  .ec-card .formula {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    background: #020617; border: 1px solid #1e293b; border-radius: 8px;
+    padding: 8px 10px; margin-top: 8px; color: #cbd5e1; display: inline-block;
+  }
+  .ec-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ec-btn {
+    border: none; border-radius: 10px; padding: 9px 16px; font-size: 13px;
+    font-weight: 600; cursor: pointer; color: #fff; background: #059669;
+    transition: background .15s;
+  }
+  .ec-btn:hover { background: #10b981; }
+  .ec-btn.ghost { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; }
+  .ec-btn.ghost:hover { background: #334155; }
+  .ec-speed { flex: 1; min-width: 140px; display: flex; align-items: center; gap: 8px; color: #94a3b8; font-size: 12px; }
+  .ec-speed input { flex: 1; accent-color: #22d3ee; }
+  .ec-check { display: flex; align-items: center; gap: 6px; color: #cbd5e1; font-size: 12px; cursor: pointer; }
+  .ec-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; margin-right: 6px; }
+  .tag-an { background: #7f1d1d; color: #fecaca; }
+  .tag-ca { background: #1e3a8a; color: #bfdbfe; }
+  .tag-el { background: #155e75; color: #a5f3fc; }
+</style>
+
+<div id="ec-wrap">
+  <div id="ec-stage"><div id="ec-gl"></div></div>
+
+  <div id="ec-panel">
+    <div class="ec-card ec-controls">
+      <button id="ec-play" class="ec-btn">⏸ 일시정지</button>
+      <button id="ec-reset" class="ec-btn ghost">↺ 초기화</button>
+      <label class="ec-speed">속도
+        <input type="range" id="ec-speed-range" min="0.1" max="3" step="0.1" value="1">
+        <span id="ec-speed-val">1.0x</span>
+      </label>
+      <label class="ec-check"><input type="checkbox" id="ec-labels" checked> 3D 라벨</label>
+    </div>
+
+    <div class="ec-card">
+      <h3><span class="ec-tag tag-an">양극 ANODE</span> Mg (마그네슘)</h3>
+      양극에서는 마그네슘이 산화되어 전자를 잃고 Mg²⁺ 이온으로 용출되며, 방출된 전자는 외부 도선을 따라 음극으로 이동합니다.
+      <span class="formula">Mg → Mg²⁺ + 2e⁻</span>
+    </div>
+
+    <div class="ec-card">
+      <h3><span class="ec-tag tag-ca">음극 CATHODE</span> Fe (철)</h3>
+      도선을 통해 도착한 전자를 음극(철) 표면에서 용액 속 이온이 받아 환원 반응을 일으킵니다. 수소 기포가 발생합니다.
+      <span class="formula">2H⁺ + 2e⁻ → H₂ ↑ &nbsp;·&nbsp; ½O₂ + H₂O + 2e⁻ → 2OH⁻</span>
+    </div>
+
+    <div class="ec-card">
+      <h3><span class="ec-tag tag-el">전해질</span> 이온의 이동</h3>
+      전해질 용액 속에서는 Mg²⁺ 이온이 음극 쪽으로, OH⁻ 이온이 양극 쪽으로 이동하여 전하 균형을 맞춥니다. 마우스 드래그로 3D 시점을 회전할 수 있습니다.
+      <span class="formula">e⁻ : 양극 → 음극 (도선) &nbsp;·&nbsp; 이온 : 전해질 내부 이동</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var stage = document.getElementById('ec-stage');
+  var container = document.getElementById('ec-gl');
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b132b);
+  scene.fog = new THREE.FogExp2(0x0b132b, 0.025);
+
+  var camera = new THREE.PerspectiveCamera(45,
+    stage.clientWidth / stage.clientHeight, 0.1, 1000);
+  camera.position.set(0, 4, 18);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.6;
+  controls.maxPolarAngle = Math.PI / 2 + 0.1;
+  controls.minDistance = 5;
+  controls.maxDistance = 35;
+  controls.target.set(0, 0, 0);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  var dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(10, 20, 15);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.near = 0.5;
+  dirLight.shadow.camera.far = 50;
+  dirLight.shadow.camera.left = -12;
+  dirLight.shadow.camera.right = 12;
+  dirLight.shadow.camera.top = 12;
+  dirLight.shadow.camera.bottom = -12;
+  scene.add(dirLight);
+
+  var interactiveGroup = new THREE.Group();
+  scene.add(interactiveGroup);
+
+  var base = new THREE.Mesh(
+    new THREE.CylinderGeometry(11, 11, 0.4, 64),
+    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8, metalness: 0.2 }));
+  base.position.y = -4.2;
+  base.receiveShadow = true;
+  interactiveGroup.add(base);
+
+  var tankWidth = 12, tankHeight = 7, tankDepth = 6;
+  var glassGeo = new THREE.BoxGeometry(tankWidth, tankHeight, tankDepth);
+  var glassTank = new THREE.Mesh(glassGeo, new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.25,
+    roughness: 0.1, metalness: 0.1, transmission: 0.9, ior: 1.4,
+    side: THREE.DoubleSide
+  }));
+  glassTank.position.y = -0.5;
+  interactiveGroup.add(glassTank);
+  glassTank.add(new THREE.LineSegments(
+    new THREE.EdgesGeometry(glassGeo),
+    new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.4 })));
+
+  var liquid = new THREE.Mesh(
+    new THREE.BoxGeometry(tankWidth - 0.2, tankHeight - 0.8, tankDepth - 0.2),
+    new THREE.MeshPhongMaterial({
+      color: 0x0284c7, transparent: true, opacity: 0.45,
+      shininess: 90, side: THREE.DoubleSide
+    }));
+  liquid.position.set(0, -0.8, 0);
+  interactiveGroup.add(liquid);
+
+  var electrodeWidth = 1.6, electrodeHeight = 7.5, electrodeDepth = 0.8;
+  var anodePosX = -3.8, cathodePosX = 3.8;
+
+  // ANODE = Mg (magnesium): silvery metal
+  var anodeMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(electrodeWidth, electrodeHeight, electrodeDepth),
+    new THREE.MeshStandardMaterial({
+      color: 0xc9d1d9, roughness: 0.35, metalness: 0.85,
+      emissive: 0x3f3f46, emissiveIntensity: 0.15
+    }));
+  anodeMesh.position.set(anodePosX, 0.3, 0);
+  anodeMesh.castShadow = true;
+  interactiveGroup.add(anodeMesh);
+
+  // CATHODE = Fe (iron): steel blue-grey
+  var cathodeMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(electrodeWidth, electrodeHeight, electrodeDepth),
+    new THREE.MeshStandardMaterial({
+      color: 0x4a7fd4, roughness: 0.3, metalness: 0.75,
+      emissive: 0x1e3a8a, emissiveIntensity: 0.2
+    }));
+  cathodeMesh.position.set(cathodePosX, 0.3, 0);
+  cathodeMesh.castShadow = true;
+  interactiveGroup.add(cathodeMesh);
+
+  var wireHeight = 4.8;
+  var wireCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(anodePosX, electrodeHeight / 2 + 0.3, 0),
+    new THREE.Vector3(anodePosX, wireHeight, 0),
+    new THREE.Vector3(0, wireHeight + 0.5, 0),
+    new THREE.Vector3(cathodePosX, wireHeight, 0),
+    new THREE.Vector3(cathodePosX, electrodeHeight / 2 + 0.3, 0)
+  ]);
+  var wireMesh = new THREE.Mesh(
+    new THREE.TubeGeometry(wireCurve, 64, 0.08, 12, false),
+    new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8, roughness: 0.2 }));
+  interactiveGroup.add(wireMesh);
+
+  // flow arrows on the wire: electrons (yellow, anode->cathode) / current (blue, cathode->anode)
+  var eArrow = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.6, 16),
+    new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+  eArrow.rotation.z = -Math.PI / 2;
+  eArrow.position.set(0, wireHeight + 0.9, 0);
+  interactiveGroup.add(eArrow);
+  var cArrow = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 16),
+    new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+  cArrow.rotation.z = Math.PI / 2;
+  cArrow.position.set(0, wireHeight + 0.1, 0);
+  interactiveGroup.add(cArrow);
+
+  // electrons along wire (anode -> cathode)
+  var electronCount = 20;
+  var electronGeo = new THREE.SphereGeometry(0.12, 16, 16);
+  var electronMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+  var electrons = [];
+  for (var i = 0; i < electronCount; i++) {
+    var em = new THREE.Mesh(electronGeo, electronMat);
+    interactiveGroup.add(em);
+    electrons.push({ mesh: em, progress: i / electronCount });
+  }
+
+  // Mg2+ ions released at anode (silver)
+  var mgIonCount = 15;
+  var mgIonGeo = new THREE.SphereGeometry(0.18, 16, 16);
+  var mgIonMat = new THREE.MeshStandardMaterial({
+    color: 0xe2e8f0, roughness: 0.3, emissive: 0x64748b });
+  var mgIons = [];
+  function resetMgIon(m) {
+    m.position.set(anodePosX + 0.85, -3.0 + Math.random() * 3.5,
+      (Math.random() - 0.5) * 1.2);
+  }
+  for (i = 0; i < mgIonCount; i++) {
+    var mm = new THREE.Mesh(mgIonGeo, mgIonMat);
+    interactiveGroup.add(mm);
+    resetMgIon(mm);
+    mgIons.push({ mesh: mm,
+      vx: 0.01 + Math.random() * 0.015,
+      vy: (Math.random() - 0.5) * 0.01,
+      vz: (Math.random() - 0.5) * 0.01 });
+  }
+
+  // OH- ions migrating to anode (purple)
+  var ohIonCount = 18;
+  var ohIonGeo = new THREE.SphereGeometry(0.14, 16, 16);
+  var ohIonMat = new THREE.MeshStandardMaterial({
+    color: 0xa855f7, roughness: 0.3, emissive: 0x581c87 });
+  var ohIons = [];
+  function resetOHIon(m) {
+    m.position.set(1.5 + Math.random() * 2.5, -3.2 + Math.random() * 3.8,
+      (Math.random() - 0.5) * 1.8);
+  }
+  for (i = 0; i < ohIonCount; i++) {
+    var om = new THREE.Mesh(ohIonGeo, ohIonMat);
+    interactiveGroup.add(om);
+    resetOHIon(om);
+    ohIons.push({ mesh: om,
+      vx: -(0.01 + Math.random() * 0.015),
+      vy: (Math.random() - 0.5) * 0.01,
+      vz: (Math.random() - 0.5) * 0.01 });
+  }
+
+  // H2 bubbles rising at cathode
+  var bubbleCount = 35;
+  var bubbleGeo = new THREE.SphereGeometry(0.1, 12, 12);
+  var bubbleMat = new THREE.MeshPhongMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.7, shininess: 100 });
+  var bubbles = [];
+  function resetBubble(m) {
+    m.position.set(cathodePosX - 0.9 + (Math.random() - 0.5) * 0.4,
+      -3.5 + Math.random() * 0.5, (Math.random() - 0.5) * 1.2);
+    var s = 0.6 + Math.random() * 0.8;
+    m.scale.set(s, s, s);
+  }
+  for (i = 0; i < bubbleCount; i++) {
+    var bm = new THREE.Mesh(bubbleGeo, bubbleMat);
+    interactiveGroup.add(bm);
+    resetBubble(bm);
+    bubbles.push({ mesh: bm,
+      vy: 0.02 + Math.random() * 0.03,
+      wobbleSpeed: 2 + Math.random() * 3,
+      wobbleAmp: 0.02 + Math.random() * 0.02 });
+  }
+
+  // ---- 3D text labels: 양극(Mg) / 음극(Fe) / 전자 -e ----
+  var labelsGroup = new THREE.Group();
+  scene.add(labelsGroup);
+  function makeLabel(main, sub, bg, border) {
+    var cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 96;
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(4, 4, 248, 88, 12); else ctx.rect(4, 4, 248, 88);
+    ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = border; ctx.stroke();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(main, 128, 42);
+    if (sub) {
+      ctx.fillStyle = '#CBD5E1';
+      ctx.font = '17px sans-serif';
+      ctx.fillText(sub, 128, 70);
+    }
+    var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(cv), transparent: true }));
+    sp.scale.set(3, 1.125, 1);
+    return sp;
+  }
+  var labelAnode = makeLabel('양극 ANODE', 'Mg (마그네슘)', 'rgba(63,63,70,0.9)', '#c9d1d9');
+  labelAnode.position.set(anodePosX, 5.0, 0);
+  labelsGroup.add(labelAnode);
+
+  var labelCathode = makeLabel('음극 CATHODE', 'Fe (철)', 'rgba(30,58,138,0.9)', '#4a7fd4');
+  labelCathode.position.set(cathodePosX, 5.0, 0);
+  labelsGroup.add(labelCathode);
+
+  var labelElectron = makeLabel('전자 e⁻', '양극 → 음극', 'rgba(120,53,15,0.9)', '#facc15');
+  labelElectron.position.set(0, wireHeight + 1.7, 0);
+  labelElectron.scale.set(2.5, 0.94, 1);
+  labelsGroup.add(labelElectron);
+
+  var labelIon = makeLabel('이온 이동', '전해질 내부', 'rgba(8,51,68,0.9)', '#22d3ee');
+  labelIon.position.set(0, -3.6, 3.0);
+  labelIon.scale.set(2.5, 0.94, 1);
+  labelsGroup.add(labelIon);
+
+  // ---- controls ----
+  var isPlaying = true, simSpeed = 1.0;
+  var btnPlay = document.getElementById('ec-play');
+  var speedRange = document.getElementById('ec-speed-range');
+  var speedVal = document.getElementById('ec-speed-val');
+  var btnReset = document.getElementById('ec-reset');
+  var chkLabels = document.getElementById('ec-labels');
+
+  btnPlay.addEventListener('click', function () {
+    isPlaying = !isPlaying;
+    controls.autoRotate = isPlaying;
+    btnPlay.textContent = isPlaying ? '⏸ 일시정지' : '▶ 재생';
+  });
+  speedRange.addEventListener('input', function () {
+    simSpeed = parseFloat(speedRange.value);
+    speedVal.textContent = simSpeed.toFixed(1) + 'x';
+  });
+  chkLabels.addEventListener('change', function () {
+    labelsGroup.visible = chkLabels.checked;
+  });
+  btnReset.addEventListener('click', function () {
+    electrons.forEach(function (e, idx) { e.progress = idx / electronCount; });
+    mgIons.forEach(function (it) { resetMgIon(it.mesh); });
+    ohIons.forEach(function (it) { resetOHIon(it.mesh); });
+    bubbles.forEach(function (b) { resetBubble(b.mesh); });
+    camera.position.set(0, 4, 18);
+    controls.target.set(0, 0, 0);
+  });
+
+  function onResize() {
+    camera.aspect = stage.clientWidth / stage.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(stage.clientWidth, stage.clientHeight);
+  }
+  window.addEventListener('resize', onResize);
+
+  var clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    var delta = clock.getDelta();
+    var time = clock.getElapsedTime();
+
+    if (isPlaying) {
+      var step = delta * simSpeed;
+
+      electrons.forEach(function (e) {
+        e.progress += step * 0.25;
+        if (e.progress > 1) e.progress -= 1;
+        e.mesh.position.copy(wireCurve.getPoint(e.progress));
+      });
+      mgIons.forEach(function (item) {
+        item.mesh.position.x += item.vx * simSpeed;
+        item.mesh.position.y += item.vy * simSpeed;
+        item.mesh.position.z += item.vz * simSpeed;
+        if (item.mesh.position.x > 0.5) resetMgIon(item.mesh);
+      });
+      ohIons.forEach(function (item) {
+        item.mesh.position.x += item.vx * simSpeed;
+        item.mesh.position.y += item.vy * simSpeed;
+        item.mesh.position.z += item.vz * simSpeed;
+        if (item.mesh.position.x < anodePosX + 0.8) resetOHIon(item.mesh);
+      });
+      bubbles.forEach(function (b) {
+        b.mesh.position.y += b.vy * simSpeed;
+        b.mesh.position.x += Math.sin(time * b.wobbleSpeed) * b.wobbleAmp;
+        if (b.mesh.position.y > 2.5) resetBubble(b.mesh);
+      });
+
+      var pulse = 1 + Math.sin(time * 6) * 0.08;
+      eArrow.scale.set(pulse, pulse, pulse);
+      cArrow.scale.set(pulse, pulse, pulse);
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+</script>
